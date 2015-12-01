@@ -17,7 +17,7 @@ void loop() {
     byte data[ 3 ];
     data[ 0 ] = 255 - ( byte )( analogRead( A4 ) / 4 ); // throttle
     data[ 1 ] = 255 - ( byte )( analogRead( A1 ) / 4 ); // roll
-    data[ 2 ] = 255 - ( byte )( analogRead( A3 ) / 4 ); // pitch
+    data[ 2 ] = ( byte )( analogRead( A3 ) / 4 ); // pitch
     
     //Serial.println(data);
     Mirf.setTADDR( ( byte* )"serv2" );
