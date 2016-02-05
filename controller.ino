@@ -31,6 +31,22 @@ void printByteAsHex(byte x) {
     softwareSerial.print((char)((b2 < 10) ? b2 + '0' : b2 - 10 + 'A'));
 }
 
+float range(float x, float minX, float maxX)
+{
+    return max(min(x, maxX), minX);
+}
+
+void printThroughComma(int count, int first, ...)
+{
+    int *pointer = &first;
+    while(count--) {
+        Serial.print(*pointer);
+        Serial.print(' ');
+        pointer++;
+    }
+    Serial.println();
+}
+
 void setup() {
     Serial.begin( 9600 ); 
     softwareSerial.begin( 9600 );
@@ -46,11 +62,6 @@ void setup() {
     pinMode(A1, INPUT_PULLUP);
     pinMode(A2, INPUT_PULLUP);
     pinMode(A3, INPUT_PULLUP);
-}
-
-float range(float x, float minX, float maxX)
-{
-    return max(min(x, maxX), minX);
 }
 
 void loop() {
@@ -71,6 +82,7 @@ void loop() {
     
         if (LH_MAX - LH_MIN > MIN_AXIS_DELTA && LV_MAX - LV_MIN > MIN_AXIS_DELTA && RH_MAX - RH_MIN > MIN_AXIS_DELTA && RV_MAX - RV_MIN > MIN_AXIS_DELTA &&
             abs(LH - (LH_MAX + LH_MIN)/2) < MIN_DELTA && abs(LV - LV_MIN) < MIN_DELTA && abs(RH - (RH_MAX + RH_MIN)/2) < MIN_DELTA && abs(RV - (RV_MAX + RV_MIN)/2) < MIN_DELTA){
+            LV_MIN += 20;
             calibration = 0;
 
             Mirf.spi = &MirfHardwareSpi;
