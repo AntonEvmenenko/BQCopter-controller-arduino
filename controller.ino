@@ -35,8 +35,8 @@ void setup() {
     Serial.begin( 9600 ); 
     softwareSerial.begin( 9600 );
 
-    pinMode(2, INPUT_PULLUP);
-    pinMode(3, INPUT_PULLUP);
+    //pinMode(2, INPUT_PULLUP);
+    //pinMode(3, INPUT_PULLUP);
     pinMode(4, INPUT_PULLUP);
     pinMode(5, INPUT_PULLUP);
     pinMode(6, INPUT_PULLUP);
@@ -46,13 +46,11 @@ void setup() {
     pinMode(A1, INPUT_PULLUP);
     pinMode(A2, INPUT_PULLUP);
     pinMode(A3, INPUT_PULLUP);
-  
-    Mirf.spi = &MirfHardwareSpi;
-    Mirf.init( );  
-    Mirf.setRADDR( ( byte* )"serv1" );
-    Mirf.channel = 90;
-    Mirf.payload = sizeof( byte ) * 3;
-    Mirf.config( );
+}
+
+float range(float x, float minX, float maxX)
+{
+    return max(min(x, maxX), minX);
 }
 
 void loop() {
@@ -73,13 +71,20 @@ void loop() {
     
         if (LH_MAX - LH_MIN > MIN_AXIS_DELTA && LV_MAX - LV_MIN > MIN_AXIS_DELTA && RH_MAX - RH_MIN > MIN_AXIS_DELTA && RV_MAX - RV_MIN > MIN_AXIS_DELTA &&
             abs(LH - (LH_MAX + LH_MIN)/2) < MIN_DELTA && abs(LV - LV_MIN) < MIN_DELTA && abs(RH - (RH_MAX + RH_MIN)/2) < MIN_DELTA && abs(RV - (RV_MAX + RV_MIN)/2) < MIN_DELTA){
-          calibration = 0;
+            calibration = 0;
+
+            Mirf.spi = &MirfHardwareSpi;
+            Mirf.init( );
+            Mirf.setRADDR( ( byte* )"serv1" );
+            Mirf.channel = 90;
+            Mirf.payload = sizeof( byte ) * 3;
+            Mirf.config( );
         }
     } else {
-        byte LH = byte((analogRead(A4) - LH_MIN) / float(LH_MAX - LH_MIN) * 255);
-        byte LV = byte((analogRead(A5) - LV_MIN) / float(LV_MAX - LV_MIN) * 255);
-        byte RH = byte((analogRead(A6) - RH_MIN) / float(RH_MAX - RH_MIN) * 255);
-        byte RV = byte((analogRead(A7) - RV_MIN) / float(RV_MAX - RV_MIN) * 255);
+        byte LH = byte(range((analogRead(A4) - LH_MIN) / float(LH_MAX - LH_MIN), 0.0f, 1.0f) * 255);
+        byte LV = byte(range((analogRead(A5) - LV_MIN) / float(LV_MAX - LV_MIN), 0.0f, 1.0f) * 255);
+        byte RH = byte(range((analogRead(A6) - RH_MIN) / float(RH_MAX - RH_MIN), 0.0f, 1.0f) * 255);
+        byte RV = byte(range((analogRead(A7) - RV_MIN) / float(RV_MAX - RV_MIN), 0.0f, 1.0f) * 255);
   
         LH = LH_INV ? (255 - LH) : LH;
         LV = LV_INV ? (255 - LV) : LV;
