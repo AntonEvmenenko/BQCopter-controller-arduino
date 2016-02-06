@@ -12,6 +12,7 @@
 int LH_MIN = AXIS_MAX, LV_MIN = AXIS_MAX, RH_MIN = AXIS_MAX, RV_MIN = AXIS_MAX;
 int LH_MAX = AXIS_MIN, LV_MAX = AXIS_MIN, RH_MAX = AXIS_MIN, RV_MAX = AXIS_MIN;  
 int LH_INV = 0, LV_INV = 0, RH_INV = 0, RV_INV = 0; 
+int RH_DELTA = 0.0f, RV_DELTA = 0.0f;
 
 int calibration = 1;
 
@@ -85,6 +86,9 @@ void loop() {
             LV_MIN += 20;
             calibration = 0;
 
+            RH_DELTA = (RH - (RH_MAX + RH_MIN) / 2.0f);
+            RV_DELTA = (RV - (RV_MAX + RV_MIN) / 2.0f);
+
             Mirf.spi = &MirfHardwareSpi;
             Mirf.init( );
             Mirf.setRADDR( ( byte* )"serv1" );
@@ -95,8 +99,8 @@ void loop() {
     } else {
         byte LH = byte(range((analogRead(A4) - LH_MIN) / float(LH_MAX - LH_MIN), 0.0f, 1.0f) * 255);
         byte LV = byte(range((analogRead(A5) - LV_MIN) / float(LV_MAX - LV_MIN), 0.0f, 1.0f) * 255);
-        byte RH = byte(range((analogRead(A6) - RH_MIN) / float(RH_MAX - RH_MIN), 0.0f, 1.0f) * 255);
-        byte RV = byte(range((analogRead(A7) - RV_MIN) / float(RV_MAX - RV_MIN), 0.0f, 1.0f) * 255);
+        byte RH = byte(range((analogRead(A6) - RH_MIN - RH_DELTA) / float(RH_MAX - RH_MIN), 0.0f, 1.0f) * 255);
+        byte RV = byte(range((analogRead(A7) - RV_MIN - RV_DELTA) / float(RV_MAX - RV_MIN), 0.0f, 1.0f) * 255);
   
         LH = LH_INV ? (255 - LH) : LH;
         LV = LV_INV ? (255 - LV) : LV;
