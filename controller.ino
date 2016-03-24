@@ -1,10 +1,11 @@
-#include <EEPROM.h>
 #include <SoftwareSerial.h>
-#include <SPI.h>
-#include <Mirf.h>
-#include <nRF24L01.h>
-#include <MirfHardwareSpiDriver.h>
+
 #include <CircularBuffer.h>
+#include <BQCopterControllerUtils.h>
+
+#include <SPI.h>
+#include "nRF24L01.h"
+#include "RF24.h"
 
 #define NEED_CALIBRATION 0
 #define BT_SERIAL Serial
@@ -35,6 +36,7 @@ float RH_DELTA, RV_DELTA;
 int calibration = 0;
 #endif
 
+RF24 radio(8, 7);
 int nrf24l01Initialized = 0;
 
 SoftwareSerial softwareSerial(2, 3); // RX, TX
@@ -89,39 +91,6 @@ void sendToBT(int16_t id, int count, float first, ...) {
     outputBTSerialBuffer.push_back('\n');
 }
 
-byte parseByte(char* x) {
-    char b1 = x[0];
-    char b2 = x[1];
-    return ((((b1 >= '0' && b1 <= '9') ? b1 - '0' : b1 - 'A' + 10) << 4) & 0xF0) |
-            (((b2 >= '0' && b2 <= '9') ? b2 - '0' : b2 - 'A' + 10) & 0x0F);
-}
-
-int16_t parseInt16(char* x) {
-    int16_t result;
-    byte* pointer = (byte*)&result;
-
-    pointer[0] = parseByte(x + 2);
-    pointer[1] = parseByte(x);
-
-    return result;
-}
-
-float parseFloat(char* x) {
-    float result;
-    byte* pointer = (byte*)&result;
-
-    pointer[0] = parseByte(x + 6);
-    pointer[1] = parseByte(x + 4);
-    pointer[3] = parseByte(x + 2);
-    pointer[4] = parseByte(x);
-
-    return result;
-}
-
-float range(float x, float minX, float maxX) {
-    return max(min(x, maxX), minX);
-}
-
 void printThroughComma(int count, int first, ...) {
     int *pointer = &first;
     while(count--) {
@@ -129,36 +98,6 @@ void printThroughComma(int count, int first, ...) {
         DEBUG_SERIAL.print(' ');
     }
     DEBUG_SERIAL.println();
-}
-
-void EEPROM_float_write(int addr, float val) {
-    byte *pointer = (byte *)&val;
-    for(byte i = 0; i < 4; i++) {
-        EEPROM.update(addr + i, pointer[i]);
-    }
-}
-
-float EEPROM_float_read(int addr) {
-    byte pointer[4];
-    for(byte i = 0; i < 4; i++) {
-        pointer[i] = EEPROM.read(addr + i);
-    }
-    return *((float*)&pointer);
-}
-
-void EEPROM_int16_write(int addr, int16_t val) {
-    byte *pointer = (byte *)&val;
-    for(byte i = 0; i < 2; i++) {
-        EEPROM.update(addr + i, pointer[i]);
-    }
-}
-
-int16_t EEPROM_int16_read(int addr) {
-    byte pointer[2];
-    for(byte i = 0; i < 2; i++) {
-        pointer[i] = EEPROM.read(addr + i);
-    }
-    return *((int16_t*)&pointer);
 }
 
 void save_config() {
@@ -189,7 +128,7 @@ void load_config() {
 
 void setup() {
     BT_SERIAL.begin( 115200 );
-    DEBUG_SERIAL.begin( 9600 );
+    //DEBUG_SERIAL.begin( 9600 );
 
     //pinMode(2, INPUT_PULLUP);
     //pinMode(3, INPUT_PULLUP);
@@ -207,6 +146,8 @@ void setup() {
     load_config();
 #endif
 }
+
+int firstIteration = 1;
 
 void loop() {
     if (calibration) {
@@ -237,12 +178,17 @@ void loop() {
         }
     } else {
         if (!nrf24l01Initialized) {
-            Mirf.spi = &MirfHardwareSpi;
-            Mirf.init( );
-            Mirf.setRADDR( ( byte* )"serv1" );
-            Mirf.channel = 90;
-            Mirf.payload = sizeof( byte ) * NRF24L01_PACKAGE_SIZE;
-            Mirf.config( );
+            byte addresses[][6] = {"1Node","2Node"}; 
+            radio.begin();
+            radio.setChannel(90);
+            radio.setPALevel(RF24_PA_MAX);
+            radio.setRetries(2,15);  
+            radio.enableAckPayload();
+            radio.enableDynamicPayloads();
+            radio.openWritingPipe(addresses[1]);
+            radio.openReadingPipe(1,addresses[0]);
+            radio.stopListening();
+            
             nrf24l01Initialized = 1;
         }
 
@@ -259,24 +205,28 @@ void loop() {
         while (BT_SERIAL.available()) {
             char current = BT_SERIAL.read();
 
-            if (current == '\n') {
-                if (inputBTSerialBuffer.get_size() > 4 && (inputBTSerialBuffer.get_size() - 8) % 8 == 0) {
-                    char buffer[128];
+            if (!((current >= '0' && current <= '9') || (current >= 'A' && current <= 'F') || current == '#')) {
+                continue;
+            }
+            
+            if (current == '#') {
+                if (inputBTSerialBuffer.get_size() >= 8 && (inputBTSerialBuffer.get_size() - 8) % 8 == 0) {
+                    char temp[128];
                     for (unsigned i = 0; i < inputBTSerialBuffer.get_size(); ++i) {
-                        buffer[i] = inputBTSerialBuffer.get(i);
+                        temp[i] = inputBTSerialBuffer.get(i);
                     }
 
-                    int16_t id = parseInt16(buffer);
+                    int16_t id = parseInt16(temp);
                     int16_t tempChecksum = id;
 
                     int n = (inputBTSerialBuffer.get_size() - 8) / 8;
                     float data[10];
                     for (unsigned i = 0; i < n; ++i) {
-                        data[i] = parseFloat(buffer + 4 + i * 8);
-                        tempChecksum += parseInt16(buffer + 4 + i * 8) + parseInt16(buffer + 4 + i * 8 + 4);
+                        data[i] = parseFloat(temp + 4 + i * 8);
+                        tempChecksum += parseInt16(temp + 4 + i * 8) + parseInt16(temp + 4 + i * 8 + 4);
                     }
 
-                    int16_t checksum = parseInt16(buffer + 4 + n * 8);
+                    int16_t checksum = parseInt16(temp + 4 + n * 8);
 
                     if (checksum == tempChecksum) {
                         // packages with only ONE data element now supported
@@ -319,15 +269,23 @@ void loop() {
             package[4] = 0; // control by camera
         }
 
-        Mirf.setTADDR( ( byte* )"serv2" );
-        Mirf.send(package); //268 us
+        byte inputPackage[NRF24L01_PACKAGE_SIZE];
+
+        if (radio.write(package, NRF24L01_PACKAGE_SIZE)) {
+            if (radio.available()) {
+                radio.read(inputPackage, NRF24L01_PACKAGE_SIZE);
+
+                if (outputBTSerialBuffer.get_size() == 0 || (inputPackage[0] >= 8 && inputPackage[0] <= 13)) {
+                    sendToBT(inputPackage[0], 1, *((float*)(inputPackage + 1)));
+                }
+            } else {
+                // empty payload
+            }
+        }
 
         if (outputBTSerialBuffer.get_size() > 0) {
             BT_SERIAL.print(outputBTSerialBuffer.pop_front());
-        } else {
-            sendToBT(CONTROL, 3, float(LV - 128), float(RH - 128), float(RV - 128));
         }
-
     }
 }
 
